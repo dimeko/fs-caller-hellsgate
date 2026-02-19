@@ -9,7 +9,6 @@ pub const DW_HASH: u64 = 0x7734773477347734;
 // File Access Flags -----------------------------------------------------------------------------------
 pub mod hFILE_ACCESS {
     pub type HFileAccessRights = u32;
-    
     pub const FILE_READ_DATA: HFileAccessRights            = 0x0001; // file & pipe
     pub const FILE_LIST_DIRECTORY: HFileAccessRights       = 0x0001; // directory
     pub const FILE_WRITE_DATA: HFileAccessRights           = 0x0002; // file & pipe
@@ -65,7 +64,7 @@ pub mod hOBJECT_ATTRIBUTES {
 }
 
 pub mod hFILE_ATTRIBUTES {
-    pub const OBJECT_ATTRIBUTES_READONLY: u32 =           0x00000001;
+    pub const OBJECT_ATTRIBUTES_READONLY: u32 =        0x00000001;
     pub const FILE_ATTRIBUTE_HIDDEN: u32 =             0x00000002;
     pub const FILE_ATTRIBUTE_SYSTEM: u32 =             0x00000004;
     pub const FILE_ATTRIBUTE_DIRECTORY: u32 =          0x00000010;

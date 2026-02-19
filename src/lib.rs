@@ -202,7 +202,6 @@ impl<'a> HFile<'a> {
         }; 
         unsafe {
             defs::hNtCreateFileSsn = ssn;
-            println!("before handle: {:?}", self.handle as *mut HANDLE);
             let ntstatus =  defs::hNtCreateFile(
                 self.handle as *mut HANDLE,
                 self.mode,
@@ -216,7 +215,6 @@ impl<'a> HFile<'a> {
                 std::ptr::null_mut(),
                 0,
             );
-            println!("handle: {:?}", self.handle as *mut HANDLE);
             Ok(ntstatus)
         }
         
@@ -238,7 +236,6 @@ impl<'a> HFile<'a> {
         };        
 
         unsafe {
-            println!("handle in: {:?}",  self.handle as *const HANDLE);
             defs::hNtWriteFileSsn = ssn;
             let __status = defs::hNtWriteFile(
                 *self.handle, 

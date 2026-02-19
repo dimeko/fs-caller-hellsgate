@@ -148,7 +148,10 @@ fn main() {
     let mut handle= HANDLE(0);
     println!("init handle: {:?}", &handle as *const HANDLE);
     let file_path: &str = "\\??\\C:\\temp\\in_lib.txt";
-    let mut file = match HFile::new(&mut handle, PathBuf::from(file_path), defs::hFILE_ACCESS::FILE_WRITE_DATA) {
+    let mut file = match HFile::new(
+        &mut handle,
+        PathBuf::from(file_path),
+        defs::hFILE_ACCESS::FILE_GENERIC_WRITE) {
         Ok(_f) => _f,
         Err(_e) => {
             panic!("Error creating file object: {}", _e);
