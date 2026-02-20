@@ -379,11 +379,8 @@ impl HFile {
                 core::mem::size_of::<defs::FILE_INFORMATION::FILE_STANDARD_INFORMATION>() as u32,
                 5
             );
-
-            println!("file_information: {:?}", file_information.AllocationSize);
             Ok(ntstatus)
         }
-
     }
 }
 

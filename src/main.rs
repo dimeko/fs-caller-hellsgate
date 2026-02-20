@@ -21,6 +21,5 @@ fn main() {
 
 
     println!("status: {:#x?}", r.0);
-    file.info();
-
+    // let _ = file.info();
 }

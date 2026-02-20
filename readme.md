@@ -1,6 +1,6 @@
 #### Hellsgate mini File Manager
 
-Thie repo is an exploration of the Hellgate technique developed by amonsec and ...
+Thie repo is an exploration of the [Hellgate](https://github.com/am0nsec/HellsGate) technique developed by @am0nsec and @RtlMateusz.
 It is based on the two implementations:
 - [rust_syscalls](https://github.com/janoglezcampos/rust_syscalls)
 - [Rust-Hells-Gate](https://github.com/0xflux/Rust-Hells-Gate)
