@@ -2,7 +2,6 @@
 
 use std::ffi::{c_void};
 use winapi::ctypes::c_longlong;
-use winapi::shared::ntdef::PVOID64;
 use windows::Win32::System::IO::IO_STATUS_BLOCK;
 use windows::Wdk::Foundation::OBJECT_ATTRIBUTES;
 use windows::Win32::Foundation::{HANDLE, NTSTATUS};

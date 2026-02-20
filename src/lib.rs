@@ -2,7 +2,6 @@ use std::{os::raw::c_void, path::PathBuf};
 use std::arch::asm;
 
 use winapi::ctypes::c_longlong;
-use winapi::shared::ntdef::PVOID64;
 use windows::Win32::System::IO::{IO_STATUS_BLOCK, IO_STATUS_BLOCK_0};
 use windows::Wdk::Foundation::OBJECT_ATTRIBUTES;
 use windows::Win32::Foundation::{HANDLE, NTSTATUS, UNICODE_STRING};
