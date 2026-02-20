@@ -1,3 +1,4 @@
+use crate::defs;
 
 /*
 From https://github.com/am0nsec/HellsGate/blob/1d860c0734c0e35a2f026d9a04856ded19dfdf31/HellsGate/main.c#L92
@@ -9,8 +10,6 @@ DWORD64 djb2(PBYTE str) {
    	return dw_hash;
 }
 */
-
-use crate::defs;
 
 pub fn djb2(_str: &str) -> u64 {
     let mut dw_hash: u64 = defs::DW_HASH;

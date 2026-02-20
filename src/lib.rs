@@ -1,4 +1,3 @@
-use std::fmt::Error;
 use std::{os::raw::c_void, path::PathBuf};
 use std::arch::asm;
 
@@ -30,22 +29,21 @@ macro_rules! hide {
                 }
                 return _dw_hash
             }
-            
             return call_djb2_rec(_str.as_bytes(), defs::DW_HASH, 0);
         }
         call_djb2($e)
     }};
 }
 
-pub struct HFile<'a> {
-    handle: &'a mut HANDLE,
+pub struct HFile {
+    handle: HANDLE,
     dll_base: *mut c_void,
     offset: c_longlong,
     file_path: PathBuf,
     mode: defs::hFILE_ACCESS::HFileAccessRights
 }
 
-impl<'a> HFile<'a> {
+impl HFile {
     fn __peb_traverse()  -> Option<*mut c_void> {
         let __ntdll = "ntdll.dll";
         unsafe {
@@ -131,8 +129,6 @@ impl<'a> HFile<'a> {
     }
 
     fn __find_nt_function_ssn(&self, func_djb2: u64) -> Option<u32> {
-
-
         let func_addr = match self.__find_nt_function_address(func_djb2) {
             Some(fa) => fa,
             None => {
@@ -152,59 +148,67 @@ impl<'a> HFile<'a> {
         };
     }
 
-    pub fn new(__handle: &'a mut HANDLE, file_path: PathBuf, mode: defs::hFILE_ACCESS::HFileAccessRights) -> Result<Self, Error> {
+    pub fn new(file_path: PathBuf, mode: defs::hFILE_ACCESS::HFileAccessRights) -> Self {
         let mut _self: HFile = Self {
-            handle: __handle,
-            offset: 0,
+            handle: HANDLE::default(),
+            offset: 3,
             file_path,
             mode,
             dll_base: std::ptr::null_mut()
         };
         _self.__init_ntdll_base_functions();
-        Ok(_self)
+        _self
     }
 
     pub fn get_handle(&self) -> HANDLE {
-        *self.handle
+        self.handle
     }
 
-    pub fn create(&mut self) -> Result<NTSTATUS, String> {
-        let func_name = "NtCreateFile";
-        let ssn = match self.__find_nt_function_ssn( utils::djb2(func_name)) {
+    fn create_io_stats_block() -> IO_STATUS_BLOCK {
+        IO_STATUS_BLOCK {
+            Anonymous:  IO_STATUS_BLOCK_0 {
+                Status: NTSTATUS(0),
+            },
+            Information: 0,
+        }
+    }
+
+    fn create_object_attrs(file_path_unicode: *mut UNICODE_STRING) -> OBJECT_ATTRIBUTES {
+        OBJECT_ATTRIBUTES {
+            Length: std::mem::size_of::<OBJECT_ATTRIBUTES>() as u32,
+            RootDirectory: HANDLE(0),
+            ObjectName: file_path_unicode,
+            Attributes: defs::hOBJECT_ATTRIBUTES::OBJ_CASE_INSENSITIVE,
+            SecurityDescriptor: std::ptr::null(),
+            SecurityQualityOfService: std::ptr::null(),
+        }
+    }
+
+    pub fn create(file_path: PathBuf, mode: defs::hFILE_ACCESS::HFileAccessRights) -> Result<(Self, NTSTATUS), String> {
+        let mut hfile = HFile::new(file_path, mode);
+        let func_name = hide!("NtCreateFile");
+        let ssn = match hfile.__find_nt_function_ssn(func_name) {
             Some(_ssn) => _ssn,
             None => {
                 return Err(format!("could not find ssn for {:?}", func_name));
             }
         };
-        let file_oath_str = self.file_path.to_str().unwrap();
-
-        let mut iosb: IO_STATUS_BLOCK = IO_STATUS_BLOCK {
-            Anonymous:  IO_STATUS_BLOCK_0 {
-                Status: NTSTATUS(0),
-            },
-            Information: 0,
+        let file_path_str = hfile.file_path.to_str().unwrap();
+        let w_string: widestring::U16CString = widestring::WideCString::from_str(&file_path_str).unwrap();
+        let mut unicode_string = UNICODE_STRING {
+            Length: (file_path_str.len() * 2) as u16,
+            MaximumLength: (file_path_str.len() * 2) as u16 + 2,
+            Buffer: PWSTR::from_raw(w_string.as_ptr() as *mut u16).to_owned(),
         };
 
-        let w_string: widestring::U16CString = widestring::WideCString::from_str(&file_oath_str).unwrap();
-        let mut unicode = UNICODE_STRING {
-            Length: (file_oath_str.len() * 2) as u16,
-            MaximumLength: (file_oath_str.len() * 2) as u16 + 2,
-            Buffer: PWSTR::from_raw(w_string.as_ptr() as *mut u16),
-        };
-        
-        let mut obj_attrs = OBJECT_ATTRIBUTES {
-            Length: std::mem::size_of::<OBJECT_ATTRIBUTES>() as u32,
-            RootDirectory: HANDLE(0),
-            ObjectName: &mut unicode,
-            Attributes: defs::hOBJECT_ATTRIBUTES::OBJ_CASE_INSENSITIVE,
-            SecurityDescriptor: std::ptr::null(),
-            SecurityQualityOfService: std::ptr::null(),
-        }; 
+        let mut iosb: IO_STATUS_BLOCK = HFile::create_io_stats_block().to_owned();
+        let mut obj_attrs = HFile::create_object_attrs(&mut unicode_string);
         unsafe {
             defs::hNtCreateFileSsn = ssn;
-            let ntstatus =  defs::hNtCreateFile(
-                self.handle as *mut HANDLE,
-                self.mode,
+            println!("handke before: {:?}", hfile.handle.is_invalid());
+            let ntstatus = defs::hNtCreateFile(
+                &mut hfile.handle as *mut HANDLE,
+                hfile.mode,
                 &mut obj_attrs,
                 &mut iosb,
                 std::ptr::null_mut(),
@@ -215,7 +219,8 @@ impl<'a> HFile<'a> {
                 std::ptr::null_mut(),
                 0,
             );
-            Ok(ntstatus)
+            println!("handke after: {:?}", hfile.handle.is_invalid());
+            Ok((hfile, ntstatus))
         }
         
     }
@@ -228,17 +233,12 @@ impl<'a> HFile<'a> {
                 return Err(format!("could not find ssn for {:?}", func_name));
             }
         };
-        let mut iosb: IO_STATUS_BLOCK = IO_STATUS_BLOCK {
-            Anonymous:  IO_STATUS_BLOCK_0 {
-                Status: NTSTATUS(0),
-            },
-            Information: 0,
-        };        
-
+        let mut iosb = HFile::create_io_stats_block().to_owned();      
         unsafe {
+            println!("handke: {:?}", self.handle);
             defs::hNtWriteFileSsn = ssn;
             let __status = defs::hNtWriteFile(
-                *self.handle, 
+                self.handle, 
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
@@ -252,20 +252,82 @@ impl<'a> HFile<'a> {
         }
     }
 
-    // pub fn open(__handle: &'a mut HANDLE, file_path: PathBuf, mode: defs::hFILE_ACCESS::HFileAccessRights) -> Result<Self, Error> {
-    //     let mut _self = Self {
-    //         handle: __handle,
-    //         offset: 0,
-    //         file_path,
-    //         mode,
-    //         dll_base: std::ptr::null_mut()
-    //     };
+    pub fn open(file_path: PathBuf, mode: defs::hFILE_ACCESS::HFileAccessRights) -> Result<(Self, NTSTATUS), String> {
+        let mut hfile = HFile::new(file_path, mode);
+        let func_name = hide!("NtOpenFile");
+        let ssn = match hfile.__find_nt_function_ssn(func_name) {
+            Some(_ssn) => _ssn,
+            None => {
+                return Err(format!("could not find ssn for {:?}", func_name));
+            }
+        };
+        let file_path_str = hfile.file_path.to_str().unwrap();
+        
+        let mut iosb =  HFile::create_io_stats_block();
+        let w_string: widestring::U16CString = widestring::WideCString::from_str(&file_path_str).unwrap();
+        let mut unicode_string = UNICODE_STRING {
+            Length: (file_path_str.len() * 2) as u16,
+            MaximumLength: (file_path_str.len() * 2) as u16 + 2,
+            Buffer: PWSTR::from_raw(w_string.as_ptr() as *mut u16).to_owned(),
+        };
+        let mut obj_attrs = HFile::create_object_attrs(&mut unicode_string); 
 
-    //     _self.__init_ntdll_base_functions();
-    //     Ok(_self)
-    // }
+        unsafe {
+            defs::hNtOpenFileSsn = ssn;
+            let ntstatus =  defs::hNtOpenFile(
+                &mut hfile.handle as *mut HANDLE,
+                hfile.mode,
+                &mut obj_attrs,
+                &mut iosb,
+                defs::hSHARE_ACCESS::FILE_SHARE_WRITE,
+                defs::hCREATE_DISPOSITION::FILE_OPEN
+            );
+            Ok((hfile, ntstatus))
+        }
+    }
 
+    pub fn close(&mut self) -> Result<NTSTATUS, String> {
+        let func_name = hide!("NtCloseFile");
+        let ssn = match self.__find_nt_function_ssn(func_name) {
+            Some(_ssn) => _ssn,
+            None => {
+                return Err(format!("could not find ssn for {:?}", func_name));
+            }
+        };
+        unsafe {
+            defs::hNtCloseFileSsn = ssn;
+            let ntstatus = defs::hNtCloseFile(self.handle);
+            Ok(ntstatus)
+        }
+    }
 
+    pub fn delete(&self) -> Result<NTSTATUS, String> {
+        let func_name = hide!("NtDeleteFile");
+        let ssn = match self.__find_nt_function_ssn(func_name) {
+            Some(_ssn) => _ssn,
+            None => {
+                return Err(format!("could not find ssn for {:?}", func_name));
+            }
+        };
+
+        let file_path_str = self.file_path.to_str().unwrap();
+        let w_string: widestring::U16CString = widestring::WideCString::from_str(&file_path_str).unwrap();
+        let mut unicode_string = UNICODE_STRING {
+            Length: (file_path_str.len() * 2) as u16,
+            MaximumLength: (file_path_str.len() * 2) as u16 + 2,
+            Buffer: PWSTR::from_raw(w_string.as_ptr() as *mut u16).to_owned(),
+        };
+        let mut obj_attrs = HFile::create_object_attrs(&mut unicode_string); 
+        unsafe {
+            defs::hNtDeleteFileSsn = ssn;
+            let ntstatus = defs::hNtDeleteFile(&mut obj_attrs);
+            Ok(ntstatus)
+        }
+    }
+
+//     pub fn info(&mut self) -> Result<NTSTATUS, String> {
+
+//     }
 }
 
 
