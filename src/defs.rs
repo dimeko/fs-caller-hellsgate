@@ -1,6 +1,8 @@
 #![allow(non_snake_case)]
 
-use std::ffi::{c_longlong, c_void};
+use std::ffi::{c_void};
+use winapi::ctypes::c_longlong;
+use winapi::shared::ntdef::PVOID64;
 use windows::Win32::System::IO::IO_STATUS_BLOCK;
 use windows::Wdk::Foundation::OBJECT_ATTRIBUTES;
 use windows::Win32::Foundation::{HANDLE, NTSTATUS};
@@ -151,6 +153,28 @@ pub static mut hNtDeleteFileSsn: u32 = 0;
 #[unsafe(no_mangle)]
 pub static mut hNtQueryInformationFileSsn: u32 = 0;
 
+#[unsafe(no_mangle)]
+#[warn(non_upper_case_globals)]
+pub static mut hNtCreateFileSyscallAddr: u64 = 0;
+#[unsafe(no_mangle)]
+#[warn(non_upper_case_globals)]
+pub static mut hNtWriteFileSyscallAddr: u64 = 0;
+#[unsafe(no_mangle)]
+#[warn(non_upper_case_globals)]
+pub static mut hNtOpenFileSyscallAddr: u64 = 0;
+#[unsafe(no_mangle)]
+#[warn(non_upper_case_globals)]
+pub static mut hNtCloseFileSyscallAddr: u64 = 0;
+#[unsafe(no_mangle)]
+#[warn(non_upper_case_globals)]
+pub static mut hNtReadFileSyscallAddr: u64 = 0;
+#[unsafe(no_mangle)]
+#[warn(non_upper_case_globals)]
+pub static mut hNtDeleteFileSyscallAddr: u64 = 0;
+#[unsafe(no_mangle)]
+#[warn(non_upper_case_globals)]
+pub static mut hNtQueryInformationFileSyscallAddr: u64 = 0;
+
 unsafe extern "C" {
     pub fn hNtCreateFile(
         file_handle: *mut HANDLE,
@@ -215,3 +239,60 @@ unsafe extern "C" {
         file_information_class: u32,
     ) -> NTSTATUS;
 }
+
+pub mod FILE_INFORMATION {
+    use winapi::ctypes::c_longlong;
+
+    #[repr(C)]
+    pub struct FILE_STANDARD_INFORMATION {
+        pub AllocationSize: *mut c_longlong,
+        pub EndOfFile: *mut c_longlong,
+        pub NumberOfLinks: u32,
+        pub DeletePending: bool,
+        pub Directory: bool,
+    } 
+}
+
+// typedef enum _FILE_INFORMATION_CLASS {
+//     FileDirectoryInformation = 1,
+//     FileFullDirectoryInformation,
+//     FileBothDirectoryInformation,
+//     FileBasicInformation,
+//     FileStandardInformation,
+//     FileInternalInformation,
+//     FileEaInformation,
+//     FileAccessInformation,
+//     FileNameInformation,
+//     FileRenameInformation,
+//     FileLinkInformation,
+//     FileNamesInformation,
+//     FileDispositionInformation,
+//     FilePositionInformation,
+//     FileFullEaInformation,
+//     FileModeInformation,
+//     FileAlignmentInformation,
+//     FileAllInformation,
+//     FileAllocationInformation,
+//     FileEndOfFileInformation,
+//     FileAlternateNameInformation,
+//     FileStreamInformation,
+//     FilePipeInformation,
+//     FilePipeLocalInformation,
+//     FilePipeRemoteInformation,
+//     FileMailslotQueryInformation,
+//     FileMailslotSetInformation,
+//     FileCompressionInformation,
+//     FileCopyOnWriteInformation,
+//     FileCompletionInformation,
+//     FileMoveClusterInformation,
+//     FileOleClassIdInformation,
+//     FileOleStateBitsInformation,
+//     FileNetworkOpenInformation,
+//     FileObjectIdInformation,
+//     FileOleAllInformation,
+//     FileOleDirectoryInformation,
+//     FileContentIndexInformation,
+//     FileInheritContentIndexInformation,
+//     FileOleInformation,
+//     FileMaximumInformation
+// } FILE_INFORMATION_CLASS, *PFILE_INFORMATION_CLASS;

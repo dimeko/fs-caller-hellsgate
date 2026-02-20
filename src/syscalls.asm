@@ -16,52 +16,62 @@ EXTERN hNtReadFileSsn:DWORD
 EXTERN hNtDeleteFileSsn:DWORD
 EXTERN hNtQueryInformationFileSsn:DWORD
 
+EXTERN hNtCreateFileSyscallAddr:QWORD
+EXTERN hNtWriteFileSyscallAddr:QWORD
+EXTERN hNtOpenFileSyscallAddr:QWORD
+EXTERN hNtCloseFileSyscallAddr:QWORD
+EXTERN hNtReadFileSyscallAddr:QWORD
+EXTERN hNtDeleteFileSyscallAddr:QWORD
+EXTERN hNtQueryInformationFileSyscallAddr:QWORD
+
 hNtCreateFile PROC
     mov r10, rcx
     mov eax, hNtCreateFileSsn
-    syscall
+    jmp hNtCreateFileSyscallAddr
     ret
 hNtCreateFile ENDP
 
 hNtWriteFile PROC
     mov r10, rcx
     mov eax, hNtWriteFileSsn
-    syscall
+
+
+    jmp hNtWriteFileSyscallAddr
     ret
 hNtWriteFile ENDP
 
 hNtReadFile PROC
     mov r10, rcx
     mov eax, hNtReadFileSsn
-    syscall
+    jmp hNtReadFileSyscallAddr
     ret
 hNtReadFile ENDP
 
 hNtOpenFile PROC
     mov r10, rcx
     mov eax, hNtOpenFileSsn
-    syscall
+    jmp hNtOpenFileSyscallAddr
     ret
 hNtOpenFile ENDP
 
 hNtCloseFile PROC
     mov r10, rcx
     mov eax, hNtCloseFileSsn
-    syscall
+    jmp hNtCloseFileSyscallAddr
     ret
 hNtCloseFile ENDP
 
 hNtDeleteFile PROC
     mov r10, rcx
     mov eax, hNtDeleteFileSsn
-    syscall
+    jmp hNtDeleteFileSyscallAddr
     ret
 hNtDeleteFile ENDP
 
 hNtQueryInformationFile PROC
     mov r10, rcx
     mov eax, hNtQueryInformationFileSsn
-    syscall
+    jmp  hNtQueryInformationFileSyscallAddr
     ret
 hNtQueryInformationFile ENDP
 

@@ -2,6 +2,7 @@ use std::{os::raw::c_void, path::PathBuf};
 use std::arch::asm;
 
 use winapi::ctypes::c_longlong;
+use winapi::shared::ntdef::PVOID64;
 use windows::Win32::System::IO::{IO_STATUS_BLOCK, IO_STATUS_BLOCK_0};
 use windows::Wdk::Foundation::OBJECT_ATTRIBUTES;
 use windows::Win32::Foundation::{HANDLE, NTSTATUS, UNICODE_STRING};
@@ -65,13 +66,11 @@ impl HFile {
                 current_entry = ldr_data_struct.InMemoryOrderLinks.Flink.sub(0x1) as usize;
                             
                 if current_entry == head {
-                    println!("Looped back to the start.");
                     break;
                 }
 
                 let _module_name =  match ldr_data_struct.FullDllName.Buffer.to_string() {
                     Ok(_str) => {
-                        println!("dll_base: {:#x?}", ldr_data_struct.DllBase);
                         _str
                     },
                     Err(_) => continue
@@ -83,6 +82,19 @@ impl HFile {
             }
         }
         return None;
+    }
+
+    fn __find_null_terminator(starting_add: *const u8) -> usize {
+        let mut _c: isize = 0;
+        unsafe {
+            loop  {
+                if *(starting_add.offset(_c)) == 0{
+                    break;
+                }
+                _c = _c + 1;
+            }
+        }
+        _c as usize
     }
 
     fn __find_nt_function_address(&self, func_djb2: u64) -> Option<*const c_void> {
@@ -106,15 +118,9 @@ impl HFile {
             let ordinals = self.dll_base.add(export_directory.AddressOfNameOrdinals as usize) as *const u16;
 
             for i in 0.. export_directory.NumberOfNames {
-                let function_name = {
-                    let __name = self.dll_base.add(*names.offset(i as isize) as usize) as *const u8;
-                    let mut len = 0;
-                    while *__name.add(len) != 0 {
-                        len += 1;
-                    }
-                    std::slice::from_raw_parts(__name, len)
-                };
-                let func_name_from_bytes = str::from_utf8(function_name).unwrap();
+                let func_name_addr = self.dll_base.add(*names.offset(i as isize) as usize) as *const u8;
+                let func_name_bytes = std::slice::from_raw_parts(func_name_addr, HFile::__find_null_terminator(func_name_addr));
+                let func_name_from_bytes = str::from_utf8(func_name_bytes).unwrap();
                 
                 if utils::djb2(func_name_from_bytes) == func_djb2 {
                     let ordinal = *ordinals.offset(i.try_into().unwrap()) as usize;
@@ -128,7 +134,7 @@ impl HFile {
         None
     }
 
-    fn __find_nt_function_ssn(&self, func_djb2: u64) -> Option<u32> {
+    fn __find_nt_function_ssn(&self, func_djb2: u64) -> Option<(u32, u64)> {
         let func_addr = match self.__find_nt_function_address(func_djb2) {
             Some(fa) => fa,
             None => {
@@ -136,8 +142,13 @@ impl HFile {
             }
         };
 
-        return Some(unsafe { *((func_addr as *const u8).add(4) as *const u32) });
-}
+        unsafe  {
+            return Some((
+                *((func_addr as *const u8).add(4) as *const u32),
+                (func_addr as *const u8).add(18) as u64
+            ));
+        }
+    }
 
     fn __init_ntdll_base_functions(&mut self) {
         self.dll_base = match HFile::__peb_traverse() {
@@ -187,7 +198,7 @@ impl HFile {
     pub fn create(file_path: PathBuf, mode: defs::hFILE_ACCESS::HFileAccessRights) -> Result<(Self, NTSTATUS), String> {
         let mut hfile = HFile::new(file_path, mode);
         let func_name = hide!("NtCreateFile");
-        let ssn = match hfile.__find_nt_function_ssn(func_name) {
+        let (ssn, syscall_addr) = match hfile.__find_nt_function_ssn(func_name) {
             Some(_ssn) => _ssn,
             None => {
                 return Err(format!("could not find ssn for {:?}", func_name));
@@ -201,11 +212,13 @@ impl HFile {
             Buffer: PWSTR::from_raw(w_string.as_ptr() as *mut u16).to_owned(),
         };
 
+        unsafe {
+            defs::hNtCreateFileSsn = ssn;
+            defs::hNtCreateFileSyscallAddr = syscall_addr;
+        }
         let mut iosb: IO_STATUS_BLOCK = HFile::create_io_stats_block().to_owned();
         let mut obj_attrs = HFile::create_object_attrs(&mut unicode_string);
         unsafe {
-            defs::hNtCreateFileSsn = ssn;
-            println!("handke before: {:?}", hfile.handle.is_invalid());
             let ntstatus = defs::hNtCreateFile(
                 &mut hfile.handle as *mut HANDLE,
                 hfile.mode,
@@ -219,7 +232,6 @@ impl HFile {
                 std::ptr::null_mut(),
                 0,
             );
-            println!("handke after: {:?}", hfile.handle.is_invalid());
             Ok((hfile, ntstatus))
         }
         
@@ -227,18 +239,21 @@ impl HFile {
 
     pub fn write(&mut self, mut buffer: Vec<u8>) -> Result<(NTSTATUS, usize), String> {
         let func_name = hide!("NtWriteFile");
-        let ssn = match self.__find_nt_function_ssn(func_name) {
+        let (ssn, syscall_addr) = match self.__find_nt_function_ssn(func_name) {
             Some(_ssn) => _ssn,
             None => {
                 return Err(format!("could not find ssn for {:?}", func_name));
             }
         };
+        unsafe {
+            defs::hNtWriteFileSyscallAddr = syscall_addr;    
+            defs::hNtWriteFileSsn = ssn;
+        }
+
         let mut iosb = HFile::create_io_stats_block().to_owned();      
         unsafe {
-            println!("handke: {:?}", self.handle);
-            defs::hNtWriteFileSsn = ssn;
             let __status = defs::hNtWriteFile(
-                self.handle, 
+                self.handle.to_owned(), 
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
@@ -255,7 +270,7 @@ impl HFile {
     pub fn open(file_path: PathBuf, mode: defs::hFILE_ACCESS::HFileAccessRights) -> Result<(Self, NTSTATUS), String> {
         let mut hfile = HFile::new(file_path, mode);
         let func_name = hide!("NtOpenFile");
-        let ssn = match hfile.__find_nt_function_ssn(func_name) {
+        let (ssn, syscall_addr) = match hfile.__find_nt_function_ssn(func_name) {
             Some(_ssn) => _ssn,
             None => {
                 return Err(format!("could not find ssn for {:?}", func_name));
@@ -270,10 +285,13 @@ impl HFile {
             MaximumLength: (file_path_str.len() * 2) as u16 + 2,
             Buffer: PWSTR::from_raw(w_string.as_ptr() as *mut u16).to_owned(),
         };
+        unsafe {
+            defs::hNtOpenFileSsn = ssn;
+            defs::hNtOpenFileSyscallAddr = syscall_addr;
+        }
         let mut obj_attrs = HFile::create_object_attrs(&mut unicode_string); 
 
         unsafe {
-            defs::hNtOpenFileSsn = ssn;
             let ntstatus =  defs::hNtOpenFile(
                 &mut hfile.handle as *mut HANDLE,
                 hfile.mode,
@@ -288,7 +306,7 @@ impl HFile {
 
     pub fn close(&mut self) -> Result<NTSTATUS, String> {
         let func_name = hide!("NtCloseFile");
-        let ssn = match self.__find_nt_function_ssn(func_name) {
+        let (ssn, syscall_addr) = match self.__find_nt_function_ssn(func_name) {
             Some(_ssn) => _ssn,
             None => {
                 return Err(format!("could not find ssn for {:?}", func_name));
@@ -296,6 +314,9 @@ impl HFile {
         };
         unsafe {
             defs::hNtCloseFileSsn = ssn;
+            defs::hNtCloseFileSyscallAddr = syscall_addr;
+        }
+        unsafe {
             let ntstatus = defs::hNtCloseFile(self.handle);
             Ok(ntstatus)
         }
@@ -303,7 +324,7 @@ impl HFile {
 
     pub fn delete(&self) -> Result<NTSTATUS, String> {
         let func_name = hide!("NtDeleteFile");
-        let ssn = match self.__find_nt_function_ssn(func_name) {
+        let (ssn, syscall_addr) = match self.__find_nt_function_ssn(func_name) {
             Some(_ssn) => _ssn,
             None => {
                 return Err(format!("could not find ssn for {:?}", func_name));
@@ -317,17 +338,53 @@ impl HFile {
             MaximumLength: (file_path_str.len() * 2) as u16 + 2,
             Buffer: PWSTR::from_raw(w_string.as_ptr() as *mut u16).to_owned(),
         };
-        let mut obj_attrs = HFile::create_object_attrs(&mut unicode_string); 
         unsafe {
             defs::hNtDeleteFileSsn = ssn;
+            defs::hNtDeleteFileSyscallAddr = syscall_addr;
+        }
+        let mut obj_attrs = HFile::create_object_attrs(&mut unicode_string); 
+        unsafe {
             let ntstatus = defs::hNtDeleteFile(&mut obj_attrs);
             Ok(ntstatus)
         }
     }
 
-//     pub fn info(&mut self) -> Result<NTSTATUS, String> {
+    pub fn info(&mut self) -> Result<NTSTATUS, String> {
+        let func_name = hide!("NtQueryInformationFile");
+        let (ssn, syscall_addr) = match self.__find_nt_function_ssn(func_name) {
+            Some(_ssn) => _ssn,
+            None => {
+                return Err(format!("could not find ssn for {:?}", func_name));
+            }
+        };
 
-//     }
+        let mut iosb = HFile::create_io_stats_block();
+        let mut file_information: defs::FILE_INFORMATION::FILE_STANDARD_INFORMATION = defs::FILE_INFORMATION::FILE_STANDARD_INFORMATION {
+            AllocationSize: std::ptr::null_mut(),
+            EndOfFile: std::ptr::null_mut(),
+            NumberOfLinks: 0,
+            DeletePending: false,
+            Directory: false
+        };
+        unsafe {
+            defs::hNtQueryInformationFileSsn = ssn;
+            defs::hNtQueryInformationFileSyscallAddr = syscall_addr;
+        }
+
+        unsafe {
+            let ntstatus = defs::hNtQueryInformationFile(
+                self.handle,
+                &mut iosb,
+                &mut file_information as *mut defs::FILE_INFORMATION::FILE_STANDARD_INFORMATION as *mut c_void,
+                core::mem::size_of::<defs::FILE_INFORMATION::FILE_STANDARD_INFORMATION>() as u32,
+                5
+            );
+
+            println!("file_information: {:?}", file_information.AllocationSize);
+            Ok(ntstatus)
+        }
+
+    }
 }
 
 

@@ -15,11 +15,12 @@ fn main() {
     println!("creation status: {:#x?}", ntstatus.0);
 
     println!("file handle: {:?}", file.get_handle());
-    let input_bytes = String::from("value");
+    let input_bytes = String::from("vadlue");
     println!("File was created. Writing ...");
     let r = file.write(input_bytes.into_bytes()).unwrap();
 
 
     println!("status: {:#x?}", r.0);
+    file.info();
 
 }
