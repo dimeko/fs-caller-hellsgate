@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::{os::raw::c_void, path::PathBuf};
 use std::arch::asm;
 
@@ -37,15 +38,15 @@ macro_rules! hide {
 
 pub struct HFile {
     handle: HANDLE,
-    dll_base: *mut c_void,
+    ntdll_dll_base: *mut c_void,
+    kernel_dll_base: *mut c_void,
     offset: c_longlong,
     file_path: PathBuf,
     mode: defs::hFILE_ACCESS::HFileAccessRights
 }
 
 impl HFile {
-    fn __peb_traverse()  -> Option<*mut c_void> {
-        let __ntdll = "ntdll.dll";
+    fn __peb_traverse(module_name: u64)  -> Option<*mut c_void> {
         unsafe {
             let mut _peb: usize;
             let mut _ldr: usize;    
@@ -74,8 +75,10 @@ impl HFile {
                     },
                     Err(_) => continue
                 };
+                let module_path = Path::new(&_module_name);
+                let module_filename = module_path.file_name().unwrap();
 
-                if _module_name.ends_with(__ntdll) || _module_name == __ntdll {
+                if utils::djb2(module_filename.to_str().unwrap()) == module_name {
                     return Some(ldr_data_struct.DllBase);
                 }
             }
@@ -96,34 +99,34 @@ impl HFile {
         _c as usize
     }
 
-    fn __find_nt_function_address(&self, func_djb2: u64) -> Option<*const c_void> {
+    fn __find_function_address(module_base: *mut c_void, func_djb2: u64) ->  Option<*const c_void> {
         unsafe {
-            let dos_header = std::ptr::read(self.dll_base as *const IMAGE_DOS_HEADER);
+            let dos_header = std::ptr::read(module_base as *const IMAGE_DOS_HEADER);
             if  dos_header.e_magic != IMAGE_DOS_SIGNATURE {
                 return None;
             } 
             
-            let nt_headers = std::ptr::read(
-                self.dll_base.offset(dos_header.e_lfanew as isize) as *const IMAGE_NT_HEADERS64);
+            let nt_headers: IMAGE_NT_HEADERS64 = std::ptr::read(
+                module_base.offset(dos_header.e_lfanew as isize) as *const IMAGE_NT_HEADERS64);
             if nt_headers.Signature != IMAGE_NT_SIGNATURE {
                 return None;
             }
 
             let export_directory: IMAGE_EXPORT_DIRECTORY = std::ptr::read(
-                self.dll_base.add(nt_headers.OptionalHeader.DataDirectory[0].VirtualAddress as usize) as *const IMAGE_EXPORT_DIRECTORY);
+                module_base.add(nt_headers.OptionalHeader.DataDirectory[0].VirtualAddress as usize) as *const IMAGE_EXPORT_DIRECTORY);
 
-            let functions = self.dll_base.add(export_directory.AddressOfFunctions as usize) as *const u32;
-            let names = self.dll_base.add(export_directory.AddressOfNames as usize) as *const u32;
-            let ordinals = self.dll_base.add(export_directory.AddressOfNameOrdinals as usize) as *const u16;
+            let functions = module_base.add(export_directory.AddressOfFunctions as usize) as *const u32;
+            let names = module_base.add(export_directory.AddressOfNames as usize) as *const u32;
+            let ordinals = module_base.add(export_directory.AddressOfNameOrdinals as usize) as *const u16;
 
             for i in 0.. export_directory.NumberOfNames {
-                let func_name_addr = self.dll_base.add(*names.offset(i as isize) as usize) as *const u8;
+                let func_name_addr = module_base.add(*names.offset(i as isize) as usize) as *const u8;
                 let func_name_bytes = std::slice::from_raw_parts(func_name_addr, HFile::__find_null_terminator(func_name_addr));
                 let func_name_from_bytes = str::from_utf8(func_name_bytes).unwrap();
                 
                 if utils::djb2(func_name_from_bytes) == func_djb2 {
                     let ordinal = *ordinals.offset(i.try_into().unwrap()) as usize;
-                    let fn_addr = self.dll_base.add(
+                    let fn_addr = module_base.add(
                         *functions.offset(ordinal as isize)  as usize) as *const c_void;
                         
                     return Some(fn_addr);
@@ -131,6 +134,14 @@ impl HFile {
             }
         }
         None
+    }
+
+    fn __find_nt_function_address(&self, func_djb2: u64) -> Option<*const c_void> {
+        HFile::__find_function_address(self.ntdll_dll_base, func_djb2)
+    }
+
+    fn __find_kernel32_function_address(&self, func_djb2: u64) -> Option<*const c_void> {
+        HFile::__find_function_address(self.kernel_dll_base, func_djb2)
     }
 
     fn __find_nt_function_ssn(&self, func_djb2: u64) -> Option<(u32, u64)> {
@@ -149,8 +160,15 @@ impl HFile {
         }
     }
 
-    fn __init_ntdll_base_functions(&mut self) {
-        self.dll_base = match HFile::__peb_traverse() {
+    fn __init_dll_bases_functions(&mut self) {
+        self.ntdll_dll_base = match HFile::__peb_traverse(hide!("ntdll.dll")) {
+            Some(_d) => _d,
+            None => {
+                panic!("Could not find dll base");
+            }
+        };
+
+        self.kernel_dll_base = match HFile::__peb_traverse(hide!("KERNEL32.DLL")) {
             Some(_d) => _d,
             None => {
                 panic!("Could not find dll base");
@@ -164,9 +182,10 @@ impl HFile {
             offset: 3,
             file_path,
             mode,
-            dll_base: std::ptr::null_mut()
+            ntdll_dll_base: std::ptr::null_mut(),
+            kernel_dll_base: std::ptr::null_mut(),
         };
-        _self.__init_ntdll_base_functions();
+        _self.__init_dll_bases_functions();
         _self
     }
 
@@ -296,28 +315,28 @@ impl HFile {
                 hfile.mode,
                 &mut obj_attrs,
                 &mut iosb,
-                defs::hSHARE_ACCESS::FILE_SHARE_WRITE,
-                defs::hCREATE_DISPOSITION::FILE_OPEN
+                defs::hSHARE_ACCESS::FILE_SHARE_READ,
+                defs::hCREATE_OPTIONS::FILE_NON_DIRECTORY_FILE
             );
             Ok((hfile, ntstatus))
         }
     }
 
-    pub fn close(&mut self) -> Result<NTSTATUS, String> {
-        let func_name = hide!("NtCloseFile");
-        let (ssn, syscall_addr) = match self.__find_nt_function_ssn(func_name) {
-            Some(_ssn) => _ssn,
+    pub fn close(&mut self) -> Result<bool, String> {
+        let func_name = hide!("CloseHandle");
+        let func_addr = match self.__find_kernel32_function_address(func_name) {
+            Some(fa) => fa,
             None => {
-                return Err(format!("could not find ssn for {:?}", func_name));
+                return Err(format!("Could not find close function"));
             }
         };
         unsafe {
-            defs::hNtCloseFileSsn = ssn;
-            defs::hNtCloseFileSyscallAddr = syscall_addr;
-        }
-        unsafe {
-            let ntstatus = defs::hNtCloseFile(self.handle);
-            Ok(ntstatus)
+            let func: fn(HANDLE) -> bool =
+                std::mem::transmute(func_addr);
+
+            let result = func(self.handle);
+            println!("Result: {}", result);
+            Ok(result)
         }
     }
 
@@ -348,6 +367,42 @@ impl HFile {
         }
     }
 
+    pub fn read(&mut self, n_bytes: usize) -> Result<(NTSTATUS, Vec<u8>), String> {
+        let func_name = hide!("NtReadFile");
+        let (ssn, syscall_addr) = match self.__find_nt_function_ssn(func_name) {
+            Some(_ssn) => _ssn,
+            None => {
+                return Err(format!("could not find ssn for {:?}", func_name));
+            }
+        };
+        unsafe {
+            defs::hNtReadFileSsn = ssn;
+            defs::hNtReadFileSyscallAddr = syscall_addr;
+        }
+        let mut iosb = HFile::create_io_stats_block();
+
+        let mut buffer = Vec::with_capacity(n_bytes);
+
+        unsafe {
+            let ntstatus = defs::hNtReadFile(
+                self.handle,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                &mut iosb,
+                buffer.as_mut_ptr(),
+                n_bytes as u32,
+                &self.offset as *const c_longlong,
+                std::ptr::null_mut());
+            if ntstatus.is_ok() {
+                self.offset = self.offset + n_bytes as i64;
+                buffer.set_len(iosb.Information as usize);
+                // or buffer.truncate(iosb.Information as usize);
+            }
+            Ok((ntstatus, buffer))
+        }
+    }
+
     pub fn info(&mut self) -> Result<NTSTATUS, String> {
         let func_name = hide!("NtQueryInformationFile");
         let (ssn, syscall_addr) = match self.__find_nt_function_ssn(func_name) {
@@ -356,6 +411,10 @@ impl HFile {
                 return Err(format!("could not find ssn for {:?}", func_name));
             }
         };
+        unsafe {
+            defs::hNtQueryInformationFileSsn = ssn;
+            defs::hNtQueryInformationFileSyscallAddr = syscall_addr;
+        }
 
         let mut iosb = HFile::create_io_stats_block();
         let mut file_information: defs::FILE_INFORMATION::FILE_STANDARD_INFORMATION = defs::FILE_INFORMATION::FILE_STANDARD_INFORMATION {
@@ -365,10 +424,6 @@ impl HFile {
             DeletePending: false,
             Directory: false
         };
-        unsafe {
-            defs::hNtQueryInformationFileSsn = ssn;
-            defs::hNtQueryInformationFileSyscallAddr = syscall_addr;
-        }
 
         unsafe {
             let ntstatus = defs::hNtQueryInformationFile(
@@ -382,5 +437,3 @@ impl HFile {
         }
     }
 }
-
-

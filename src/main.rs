@@ -11,15 +11,33 @@ fn main() {
             panic!("Error creating file object: {}", _e);
         }
     };
+    println!("create status: {:#x?}", ntstatus);
 
-    println!("creation status: {:#x?}", ntstatus.0);
+    let input_bytes = String::from("written bytes in the test file");
+    let (ntstatus, _) = file.write(input_bytes.into_bytes()).unwrap();
+    println!("write status: {:#x?}", ntstatus);
 
-    println!("file handle: {:?}", file.get_handle());
-    let input_bytes = String::from("vadlue");
-    println!("File was created. Writing ...");
-    let r = file.write(input_bytes.into_bytes()).unwrap();
+    let ntstatus = file.close().unwrap();
+    println!("close status: {:#x?}", ntstatus);
 
+    let (mut file, ntstatus) = match HFile::open(
+        PathBuf::from(file_path),
+        defs::hFILE_ACCESS::FILE_GENERIC_READ) {
+        Ok(_f) => _f,
+        Err(_e) => {
+            panic!("Error opening file object: {}", _e);
+        }
+    };
+    println!("open status: {:#x?}", ntstatus);
 
-    println!("status: {:#x?}", r.0);
+    let (ntstatus, bytes_read) = match file.read(2) {
+        Ok(_b) => _b,
+        Err(_e) => {
+            panic!("could not read bytes: {:?}", _e);
+        }
+    };
+    println!("read status: {:#x?}", ntstatus);
+    println!("bytes read: {:?}", bytes_read);
+
     // let _ = file.info();
 }

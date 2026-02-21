@@ -4,14 +4,14 @@ PUBLIC hNtCreateFile
 PUBLIC hNtWriteFile
 PUBLIC hNtReadFile
 PUBLIC hNtOpenFile
-PUBLIC hNtCloseFile
+PUBLIC hCloseHandle
 PUBLIC hNtDeleteFile
 PUBLIC hNtQueryInformationFile
 
 EXTERN hNtCreateFileSsn:DWORD
 EXTERN hNtWriteFileSsn:DWORD
 EXTERN hNtOpenFileSsn:DWORD
-EXTERN hNtCloseFileSsn:DWORD
+EXTERN hCloseHandleSsn:DWORD
 EXTERN hNtReadFileSsn:DWORD
 EXTERN hNtDeleteFileSsn:DWORD
 EXTERN hNtQueryInformationFileSsn:DWORD
@@ -19,7 +19,7 @@ EXTERN hNtQueryInformationFileSsn:DWORD
 EXTERN hNtCreateFileSyscallAddr:QWORD
 EXTERN hNtWriteFileSyscallAddr:QWORD
 EXTERN hNtOpenFileSyscallAddr:QWORD
-EXTERN hNtCloseFileSyscallAddr:QWORD
+EXTERN hCloseHandleSyscallAddr:QWORD
 EXTERN hNtReadFileSyscallAddr:QWORD
 EXTERN hNtDeleteFileSyscallAddr:QWORD
 EXTERN hNtQueryInformationFileSyscallAddr:QWORD
@@ -54,12 +54,12 @@ hNtOpenFile PROC
     ret
 hNtOpenFile ENDP
 
-hNtCloseFile PROC
+hCloseHandle PROC
     mov r10, rcx
-    mov eax, hNtCloseFileSsn
-    jmp hNtCloseFileSyscallAddr
+    mov eax, hCloseHandleSsn
+    jmp hCloseHandleSyscallAddr
     ret
-hNtCloseFile ENDP
+hCloseHandle ENDP
 
 hNtDeleteFile PROC
     mov r10, rcx

@@ -8,3 +8,5 @@ It is based on the two implementations:
 It wraps basic `Nt*` functions on top of the Hellsgate technique, with inderect syscalls. 
 
 For reference, in the [rust_syscalls](https://github.com/janoglezcampos/rust_syscalls/blob/162451aaf095c8cb8c5e6b33ebf0bf44c62aca34/src/syscall.rs#L34) project, extra parameters are handled explicitly inside the syscall functions, providing a more dynamic way of supporting different argument counts. The current implementation takes a more explicit and straightforward approach, adding `Nt*` function implementations in `src/syscalls.asm`.
+
+**NOTE**: Still under development.

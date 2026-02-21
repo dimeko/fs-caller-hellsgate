@@ -1,5 +1,4 @@
 #![allow(non_snake_case)]
-
 use std::ffi::{c_void};
 use winapi::ctypes::c_longlong;
 use windows::Win32::System::IO::IO_STATUS_BLOCK;
@@ -144,7 +143,7 @@ pub static mut hNtWriteFileSsn: u32 = 0;
 #[unsafe(no_mangle)]
 pub static mut hNtOpenFileSsn: u32 = 0;
 #[unsafe(no_mangle)]
-pub static mut hNtCloseFileSsn: u32 = 0;
+pub static mut hCloseHandleSsn: u32 = 0;
 #[unsafe(no_mangle)]
 pub static mut hNtReadFileSsn: u32 = 0;
 #[unsafe(no_mangle)]
@@ -163,7 +162,7 @@ pub static mut hNtWriteFileSyscallAddr: u64 = 0;
 pub static mut hNtOpenFileSyscallAddr: u64 = 0;
 #[unsafe(no_mangle)]
 #[warn(non_upper_case_globals)]
-pub static mut hNtCloseFileSyscallAddr: u64 = 0;
+pub static mut hCloseHandleSyscallAddr: u64 = 0;
 #[unsafe(no_mangle)]
 #[warn(non_upper_case_globals)]
 pub static mut hNtReadFileSyscallAddr: u64 = 0;
@@ -207,10 +206,10 @@ unsafe extern "C" {
         apc_routine: *mut c_void,
         apc_context: *mut c_void,
         io_status_block: *mut IO_STATUS_BLOCK,
-        buffer: *const u8,
+        buffer: *mut u8,
         length: u32,
-        offset: *mut c_longlong,
-        key: u32,
+        offset: *const c_longlong,
+        key: *const c_void,
     ) -> NTSTATUS;
 
     pub fn hNtOpenFile(
@@ -222,9 +221,9 @@ unsafe extern "C" {
         open_options: u32,
     ) -> NTSTATUS;
 
-    pub fn hNtCloseFile(
+    pub fn hCloseHandle(
         file_handle: HANDLE,
-    ) -> NTSTATUS;
+    ) -> bool;
 
     pub fn hNtDeleteFile(
         object_attributes: *mut OBJECT_ATTRIBUTES,
