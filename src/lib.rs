@@ -1,3 +1,8 @@
+#![cfg(target_os = "windows")]
+
+#[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
+compile_error!("This crate requires Windows x86_64.");
+
 use std::path::Path;
 use std::{os::raw::c_void, path::PathBuf};
 use std::arch::asm;
@@ -264,10 +269,10 @@ impl HFile {
             }
         };
         unsafe {
-            defs::hNtWriteFileSyscallAddr = syscall_addr;    
             defs::hNtWriteFileSsn = ssn;
+            defs::hNtWriteFileSyscallAddr = syscall_addr;    
         }
-
+        
         let mut iosb = HFile::create_io_stats_block().to_owned();      
         unsafe {
             let __status = defs::hNtWriteFile(
@@ -316,7 +321,7 @@ impl HFile {
                 &mut obj_attrs,
                 &mut iosb,
                 defs::hSHARE_ACCESS::FILE_SHARE_READ,
-                defs::hCREATE_OPTIONS::FILE_NON_DIRECTORY_FILE
+                defs::hCREATE_OPTIONS::FILE_SYNCHRONOUS_IO_NONALERT
             );
             Ok((hfile, ntstatus))
         }
@@ -433,6 +438,7 @@ impl HFile {
                 core::mem::size_of::<defs::FILE_INFORMATION::FILE_STANDARD_INFORMATION>() as u32,
                 5
             );
+            // println!("aloc size: {:?}", file_information.AllocationSize);
             Ok(ntstatus)
         }
     }
