@@ -340,12 +340,11 @@ impl HFile {
                 std::mem::transmute(func_addr);
 
             let result = func(self.handle);
-            println!("Result: {}", result);
             Ok(result)
         }
     }
 
-    pub fn delete(&self) -> Result<NTSTATUS, String> {
+    pub fn delete(&self, file_path: &str) -> Result<NTSTATUS, String> {
         let func_name = hide!("NtDeleteFile");
         let (ssn, syscall_addr) = match self.__find_nt_function_ssn(func_name) {
             Some(_ssn) => _ssn,
@@ -354,11 +353,10 @@ impl HFile {
             }
         };
 
-        let file_path_str = self.file_path.to_str().unwrap();
-        let w_string: widestring::U16CString = widestring::WideCString::from_str(&file_path_str).unwrap();
+        let w_string: widestring::U16CString = widestring::WideCString::from_str(&file_path).unwrap();
         let mut unicode_string = UNICODE_STRING {
-            Length: (file_path_str.len() * 2) as u16,
-            MaximumLength: (file_path_str.len() * 2) as u16 + 2,
+            Length: (file_path.len() * 2) as u16,
+            MaximumLength: (file_path.len() * 2) as u16 + 2,
             Buffer: PWSTR::from_raw(w_string.as_ptr() as *mut u16).to_owned(),
         };
         unsafe {
@@ -441,5 +439,71 @@ impl HFile {
             // println!("aloc size: {:?}", file_information.AllocationSize);
             Ok(ntstatus)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs};
+
+    use super::*;
+    const FILE_PATH: &str = "\\??\\C:\\temp\\test.txt";
+
+    #[test]
+    fn created() {
+        let  (mut file, ntstatus) = match HFile::create(
+        PathBuf::from(FILE_PATH),
+        defs::hFILE_ACCESS::FILE_GENERIC_WRITE) {
+            Ok(_f) => _f,
+            Err(_e) => {
+                panic!("Error creating file object: {}", _e);
+                }
+        };
+        println!("create status: {:#x?}", ntstatus);
+        let _ = file.close().unwrap();
+
+        assert!(fs::exists(FILE_PATH).unwrap());
+        let ntstatus = file.delete(FILE_PATH).unwrap();
+
+        println!("delete status: {:#x?}", ntstatus);
+        assert!(!fs::exists(FILE_PATH).unwrap());
+    }
+
+    #[test]
+    fn has_bytes() {
+        let  (mut file, ntstatus) = match HFile::create(
+        PathBuf::from(FILE_PATH),
+        defs::hFILE_ACCESS::FILE_GENERIC_WRITE) {
+            Ok(_f) => _f,
+            Err(_e) => {
+                panic!("Error creating file object: {}", _e);
+                }
+        };
+        println!("create status: {:#x?}", ntstatus);
+        let _ = file.write(vec![b'r', b'a', b'n', b'd', b'o', b'm']);
+        let _ = file.close();
+
+        let  (mut file, _) = match HFile::open(
+        PathBuf::from(FILE_PATH),
+        defs::hFILE_ACCESS::FILE_GENERIC_READ) {
+            Ok(_f) => _f,
+            Err(_e) => {
+                panic!("Error creating file object: {}", _e);
+                }
+        };
+        println!("open status: {:#x?}", ntstatus);
+
+        let (ntstatus, bytes) = file.read(6).unwrap();
+        println!("read status: {:#x?}", ntstatus);
+
+        assert_eq!(bytes, vec![b'r', b'a', b'n', b'd', b'o', b'm']);
+        let _ = file.close();
+
+        let file = HFile::new(PathBuf::from(FILE_PATH), defs::hFILE_ACCESS::FILE_GENERIC_READ); 
+        assert!(fs::exists(FILE_PATH).unwrap());
+        let ntstatus = file.delete(FILE_PATH).unwrap();
+
+        println!("delete status: {:#x?}", ntstatus);
+        assert!(!fs::exists(FILE_PATH).unwrap());
     }
 }

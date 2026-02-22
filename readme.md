@@ -11,6 +11,13 @@ For reference, in the [rust_syscalls](https://github.com/janoglezcampos/rust_sys
 
 **NOTE**: Still under development.
 
+### Unit tests
+
+At the moment, file `share_access` parameter is not configurable so unit tests must run on a single thread:
+```rust
+cargo test -- --test-threads=1
+```
+
 #### Small quest
 
 I am encountering an unexpected (at least to me) behaviour in `HFile::write(...)` method. If I put the `syscall_addr` and `ssn` value change right before the `hNtWriteFile` call, I get an error:
