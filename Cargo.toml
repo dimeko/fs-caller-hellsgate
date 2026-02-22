@@ -7,7 +7,6 @@ edition = "2024"
 default = ["win32", "wdk"]
 win32 = [
     "windows/Win32_System_Threading",
-    "windows/Win32_Security",
     "windows/Win32_System_LibraryLoader",
     "windows/Win32_System_Diagnostics",
     "windows/Win32_System_Diagnostics_Debug",
@@ -26,7 +25,6 @@ windows-core = "0.56.0"
 winapi = { version = "0.3.9", features = ["ntdef"] }
 windows = { version = "0.56.0", features = [
     "Win32_System_Threading",
-    "Win32_Security",
     "Win32_System_LibraryLoader",
     "Win32_System_Diagnostics",
     "Win32_System_Diagnostics_Debug",
